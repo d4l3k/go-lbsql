@@ -50,6 +50,19 @@ func (b *Balancer) Remove(name string) {
 	delete(b.mu.connectors, name)
 }
 
+// ConnectorNames returns a list of all the names of connectors currently in the
+// balancer.
+func (b *Balancer) ConnectorNames() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var names []string
+	for name := range b.mu.connectors {
+		names = append(names, name)
+	}
+	return names
+}
+
 // randomConnector returns a random connector.
 func (b *Balancer) randomConnector() (driver.Connector, error) {
 	b.mu.Lock()
