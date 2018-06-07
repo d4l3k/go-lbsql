@@ -34,11 +34,8 @@ func TestBalancer(t *testing.T) {
 		t.Fatalf("expected 1 connectors")
 	}
 
-	connector, err := b.randomConnector()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if connector != foo {
+	connectors := b.randomConnectors()
+	if connectors[0] != foo {
 		t.Fatalf("expected randomConnector = foo")
 	}
 

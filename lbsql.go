@@ -5,8 +5,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"sync"
-
-	"github.com/cenkalti/backoff"
 )
 
 // ErrNoConnectors is returned when there are no connectors added to the
@@ -63,37 +61,42 @@ func (b *Balancer) ConnectorNames() []string {
 	return names
 }
 
-// randomConnector returns a random connector.
-func (b *Balancer) randomConnector() (driver.Connector, error) {
+// randomConnectors returns the connectors in a random order.
+func (b *Balancer) randomConnectors() []driver.Connector {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	var connectors []driver.Connector
 	for _, c := range b.mu.connectors {
-		return c, nil
+		connectors = append(connectors, c)
 	}
-	return nil, ErrNoConnectors
+
+	return connectors
 }
 
 // Connect connects to a random driver.Connector. If the connection fails it
-// retries using exponential backoff until one succeeds, it times out, or the
-// context is canceled.
+// retries all the available connectors until one succeeds, or the context is
+// canceled.
 func (b *Balancer) Connect(ctx context.Context) (driver.Conn, error) {
-	eb := backoff.NewExponentialBackOff()
-	ctxb := backoff.WithContext(eb, ctx)
+	connectors := b.randomConnectors()
+
+	if len(connectors) == 0 {
+		return nil, ErrNoConnectors
+	}
 
 	var conn driver.Conn
-	if err := backoff.Retry(func() error {
-		c, err := b.randomConnector()
-		if err != nil {
-			return backoff.Permanent(err)
+	var err error
+	for _, c := range connectors {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
 		conn, err = c.Connect(ctx)
-		return err
-	}, ctxb); err != nil {
-		return nil, err
+		if err == nil {
+			return conn, nil
+		}
 	}
-	return conn, nil
+	return nil, err
 }
 
 // Open is a thin wrapper around Connect.
